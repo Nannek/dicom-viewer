@@ -1,4 +1,4 @@
-import { imageLoader, metaData, utilities, Enums } from '@cornerstonejs/core'
+import { imageLoader, metaData, utilities, Enums, cache } from '@cornerstonejs/core'
 import type { IImage } from '@cornerstonejs/core/types'
 import dicomParser from 'dicom-parser'
 import { appLog } from '../logger'
@@ -58,9 +58,16 @@ export function storeBuffer(buffer: ArrayBuffer): string {
 }
 
 export function clearCache(): void {
+  // Evict old images from CS3D's cache before clearing our maps.
+  // idCounter is intentionally NOT reset — IDs must stay unique across loads so
+  // CS3D doesn't serve a stale cached image under a reused ID.
+  for (const imageId of bufferCache.keys()) {
+    if (cache.getImageLoadObject(imageId)) {
+      cache.removeImageLoadObject(imageId)
+    }
+  }
   bufferCache.clear()
   metaCache.clear()
-  idCounter = 0
 }
 
 async function buildImage(imageId: string): Promise<IImage> {
