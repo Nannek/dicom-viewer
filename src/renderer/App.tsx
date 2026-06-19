@@ -3,10 +3,12 @@ import { Toolbar } from './components/Toolbar'
 import { Viewport } from './components/Viewport'
 import { MetadataPanel } from './components/MetadataPanel'
 import { CinePlayer } from './components/CinePlayer'
+import { LogPanel } from './components/LogPanel'
 import { useAppStore } from './store'
 
 export default function App() {
   const loadFiles = useAppStore((s) => s.loadFiles)
+  const isLogOpen = useAppStore((s) => s.isLogOpen)
 
   useEffect(() => {
     return window.api.onTriggerOpen(() => loadFiles())
@@ -22,6 +24,7 @@ export default function App() {
         </div>
         <MetadataPanel />
       </div>
+      {isLogOpen && <LogPanel />}
     </div>
   )
 }

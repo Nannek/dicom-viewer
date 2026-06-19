@@ -11,6 +11,7 @@
 import { imageLoader } from '@cornerstonejs/core'
 import type { IImage } from '@cornerstonejs/core/types'
 import dicomParser from 'dicom-parser'
+import { appLog } from '../logger'
 
 export const SCHEME = 'dicomlocal'
 
@@ -60,8 +61,25 @@ async function buildImage(imageId: string): Promise<IImage> {
   const spacingRaw = dataset.string('x00280030') ?? '1\\1'
   const [rowSpacing, colSpacing] = spacingRaw.split('\\').map((s) => parseFloat(s) || 1)
 
+  appLog('debug', `Building image ${imageId}`, {
+    rows,
+    cols,
+    bitsAllocated,
+    bitsStored,
+    isSigned,
+    isColor,
+    photometric,
+    slope,
+    intercept,
+    windowCenter,
+    windowWidth,
+  })
+
   const el = dataset.elements['x7fe00010']
-  if (!el) throw new Error('DICOM file has no Pixel Data element')
+  if (!el) {
+    appLog('error', `No Pixel Data element in ${imageId}`)
+    throw new Error('DICOM file has no Pixel Data element')
+  }
 
   // Copy pixel data to guarantee alignment for typed array views
   const rawBytes = byteArray.slice(el.dataOffset, el.dataOffset + el.length)
@@ -74,6 +92,7 @@ async function buildImage(imageId: string): Promise<IImage> {
       ? new Int16Array(rawBytes.buffer)
       : new Uint16Array(rawBytes.buffer)
   } else {
+    appLog('error', `Unsupported Bits Allocated: ${bitsAllocated} in ${imageId}`)
     throw new Error(`Unsupported Bits Allocated: ${bitsAllocated}`)
   }
 

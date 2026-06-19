@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import dicomParser from 'dicom-parser'
 import type { DicomFileData } from '../../shared/types'
 import { storeBuffer, clearCache } from '../cornerstone/localImageLoader'
+import { appLog } from '../logger'
 
 export interface MetadataEntry {
   tag: string
@@ -16,12 +17,14 @@ interface AppState {
   isPlaying: boolean
   playbackFps: number
   activeTool: string
+  isLogOpen: boolean
 
   loadFiles: () => Promise<void>
   setCurrentImageIndex: (i: number) => void
   setIsPlaying: (p: boolean) => void
   setPlaybackFps: (fps: number) => void
   setActiveTool: (tool: string) => void
+  toggleLogPanel: () => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -31,15 +34,24 @@ export const useAppStore = create<AppState>((set) => ({
   isPlaying: false,
   playbackFps: 10,
   activeTool: 'WindowLevel',
+  isLogOpen: false,
 
   loadFiles: async () => {
+    appLog('info', 'Opening file dialog')
     const files = await window.api.openFiles()
-    if (!files.length) return
+    if (!files.length) {
+      appLog('info', 'File dialog cancelled')
+      return
+    }
 
+    appLog('info', `Loading ${files.length} file(s)`)
     clearCache()
     const sorted = sortByInstanceNumber(files)
     const imageIds = sorted.map((f) => storeBuffer(f.buffer))
     const metadata = extractKnownTags(sorted[0].buffer)
+
+    appLog('info', `Stack ready: ${imageIds.length} frame(s)`, { imageIds })
+    appLog('debug', `Metadata extracted: ${metadata.length} tag(s)`)
 
     set({ imageIds, currentImageIndex: 0, metadata, isPlaying: false })
   },
@@ -48,6 +60,7 @@ export const useAppStore = create<AppState>((set) => ({
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setPlaybackFps: (playbackFps) => set({ playbackFps }),
   setActiveTool: (activeTool) => set({ activeTool }),
+  toggleLogPanel: () => set((s) => ({ isLogOpen: !s.isLogOpen })),
 }))
 
 function sortByInstanceNumber(files: DicomFileData[]): DicomFileData[] {

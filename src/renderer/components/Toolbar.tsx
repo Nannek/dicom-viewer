@@ -9,7 +9,7 @@ const TOOLS = [
 ]
 
 export function Toolbar() {
-  const { activeTool, setActiveTool, loadFiles } = useAppStore()
+  const { activeTool, setActiveTool, loadFiles, isLogOpen, toggleLogPanel } = useAppStore()
 
   function handleTool(toolName: string) {
     setActivePrimaryTool(toolName)
@@ -36,6 +36,14 @@ export function Toolbar() {
       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         Mid-click: pan &nbsp;|&nbsp; Right-click: zoom &nbsp;|&nbsp; Scroll: navigate stack
       </span>
+      <div style={{ flex: 1 }} />
+      <button
+        className={`toolbar-btn${isLogOpen ? ' active' : ''}`}
+        title="Toggle debug log panel"
+        onClick={toggleLogPanel}
+      >
+        Logs
+      </button>
     </div>
   )
 }
