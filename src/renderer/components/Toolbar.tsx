@@ -1,5 +1,6 @@
 import { useAppStore } from '../store'
 import { setActivePrimaryTool } from '../cornerstone/tools'
+import { resetView } from '../cornerstone/viewportRef'
 
 const TOOLS = [
   { name: 'WindowLevel', label: 'W/L', title: 'Window / Level  (left-drag)' },
@@ -32,6 +33,10 @@ export function Toolbar() {
           {t.label}
         </button>
       ))}
+      <div className="toolbar-separator" />
+      <button className="toolbar-btn" title="Fit image to window and reset W/L" onClick={resetView}>
+        Fit
+      </button>
       <div className="toolbar-separator" />
       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         Mid-click: pan &nbsp;|&nbsp; Right-click: zoom &nbsp;|&nbsp; Scroll: navigate stack

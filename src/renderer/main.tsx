@@ -8,9 +8,7 @@ import { interceptConsole } from './logger'
 interceptConsole()
 
 initCornerstone().then(() => {
-  ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  )
+  // StrictMode intentionally omitted — double-invocation of effects destroys
+  // Cornerstone3D's rendering engine before it finishes initialising.
+  ReactDOM.createRoot(document.getElementById('root')!).render(<App />)
 })

@@ -8,7 +8,7 @@
  * is resolved upstream, or when switching to a webpack-based renderer build.
  */
 
-import { imageLoader } from '@cornerstonejs/core'
+import { imageLoader, Enums } from '@cornerstonejs/core'
 import type { IImage } from '@cornerstonejs/core/types'
 import dicomParser from 'dicom-parser'
 import { appLog } from '../logger'
@@ -26,6 +26,7 @@ export function storeBuffer(buffer: ArrayBuffer): string {
 
 export function clearCache(): void {
   bufferCache.clear()
+  idCounter = 0
 }
 
 export function registerLocalImageLoader(): void {
@@ -54,26 +55,10 @@ async function buildImage(imageId: string): Promise<IImage> {
   const isSigned = pixelRepresentation === 1
 
   const slope = parseFloat(dataset.string('x00281053') ?? '1') || 1
-  const intercept = parseFloat(dataset.string('x00281052') ?? '0') || 0
-  const windowCenter = parseFloat(dataset.string('x00281050') ?? '128') || 128
-  const windowWidth = parseFloat(dataset.string('x00281051') ?? '256') || 256
+  const intercept = parseFloat(dataset.string('x00281052') ?? '0')
 
   const spacingRaw = dataset.string('x00280030') ?? '1\\1'
   const [rowSpacing, colSpacing] = spacingRaw.split('\\').map((s) => parseFloat(s) || 1)
-
-  appLog('debug', `Building image ${imageId}`, {
-    rows,
-    cols,
-    bitsAllocated,
-    bitsStored,
-    isSigned,
-    isColor,
-    photometric,
-    slope,
-    intercept,
-    windowCenter,
-    windowWidth,
-  })
 
   const el = dataset.elements['x7fe00010']
   if (!el) {
@@ -96,28 +81,88 @@ async function buildImage(imageId: string): Promise<IImage> {
     throw new Error(`Unsupported Bits Allocated: ${bitsAllocated}`)
   }
 
-  const maxVal = isSigned ? (1 << (bitsStored - 1)) - 1 : (1 << bitsStored) - 1
-  const minVal = isSigned ? -(1 << (bitsStored - 1)) : 0
+  // Derive W/L from DICOM tags; fall back to pixel min/max scan to avoid all-black image
+  let windowCenter: number
+  let windowWidth: number
+  const wcStr = dataset.string('x00281050')
+  const wwStr = dataset.string('x00281051')
+
+  if (wcStr && wwStr) {
+    windowCenter = parseFloat(wcStr.split('\\')[0])
+    windowWidth = parseFloat(wwStr.split('\\')[0])
+  } else {
+    let lo = Infinity, hi = -Infinity
+    for (let i = 0; i < pixelData.length; i++) {
+      const v = pixelData[i] as number
+      if (v < lo) lo = v
+      if (v > hi) hi = v
+    }
+    const loHU = lo * slope + intercept
+    const hiHU = hi * slope + intercept
+    windowWidth = Math.max(hiHU - loHU, 1)
+    windowCenter = loHU + windowWidth / 2
+  }
+
+  const maxStorable = isSigned ? (1 << (bitsStored - 1)) - 1 : (1 << bitsStored) - 1
+  const minStorable = isSigned ? -(1 << (bitsStored - 1)) : 0
+
+  appLog('debug', `Image ready: ${cols}×${rows} ${bitsAllocated}bit WC=${windowCenter} WW=${windowWidth}`)
 
   return {
     imageId,
-    minPixelValue: minVal,
-    maxPixelValue: maxVal,
+    minPixelValue: minStorable,
+    maxPixelValue: maxStorable,
     slope,
     intercept,
     windowCenter,
     windowWidth,
+    voiLUTFunction: Enums.VOILUTFunctionType.LINEAR,
     getPixelData: () => pixelData,
+    getCanvas: () => renderToCanvas(pixelData, rows, cols, slope, intercept, windowCenter, windowWidth),
     rows,
     columns: cols,
     height: rows,
     width: cols,
     color: isColor,
     rgba: false,
+    invert: false,
+    numberOfComponents: samplesPerPixel,
     columnPixelSpacing: colSpacing,
     rowPixelSpacing: rowSpacing,
     sizeInBytes: el.length,
-    voiLUTFunction: 'LINEAR',
-    numberOfComponents: samplesPerPixel,
+    photometricInterpretation: photometric,
   } satisfies IImage
+}
+
+/** CPU-fallback canvas renderer (LINEAR VOI LUT). */
+function renderToCanvas(
+  pixelData: Uint8Array | Uint16Array | Int16Array,
+  rows: number,
+  cols: number,
+  slope: number,
+  intercept: number,
+  windowCenter: number,
+  windowWidth: number,
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = cols
+  canvas.height = rows
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return canvas
+
+  const imgData = ctx.createImageData(cols, rows)
+  const halfWW = windowWidth / 2
+
+  for (let i = 0, n = rows * cols; i < n; i++) {
+    const hu = (pixelData[i] as number) * slope + intercept
+    const t = Math.min(1, Math.max(0, (hu - windowCenter + halfWW) / windowWidth))
+    const byte = Math.round(t * 255)
+    imgData.data[i * 4] = byte
+    imgData.data[i * 4 + 1] = byte
+    imgData.data[i * 4 + 2] = byte
+    imgData.data[i * 4 + 3] = 255
+  }
+
+  ctx.putImageData(imgData, 0, 0)
+  return canvas
 }

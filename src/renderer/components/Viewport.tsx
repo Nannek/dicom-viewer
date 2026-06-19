@@ -2,21 +2,21 @@ import { useEffect, useRef } from 'react'
 import { RenderingEngine, Enums } from '@cornerstonejs/core'
 import type { IStackViewport } from '@cornerstonejs/core/types'
 import { setupToolGroup } from '../cornerstone/tools'
-import { setViewportElement } from '../cornerstone/viewportRef'
+import { setViewportElement, RENDERING_ENGINE_ID, VIEWPORT_ID } from '../cornerstone/viewportRef'
 import { useAppStore } from '../store'
-
-const RENDERING_ENGINE_ID = 'dicom-rendering-engine'
-const VIEWPORT_ID = 'dicom-stack-viewport'
+import { appLog } from '../logger'
 
 export function Viewport() {
   const elementRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<RenderingEngine | null>(null)
+  const stackReadyRef = useRef(false)
   const { imageIds, currentImageIndex } = useAppStore()
 
   // Initialize rendering engine once on mount
   useEffect(() => {
     if (!elementRef.current) return
 
+    appLog('debug', 'Creating RenderingEngine')
     const engine = new RenderingEngine(RENDERING_ENGINE_ID)
     engineRef.current = engine
     setViewportElement(elementRef.current)
@@ -28,8 +28,11 @@ export function Viewport() {
     })
 
     setupToolGroup(VIEWPORT_ID, RENDERING_ENGINE_ID)
+    appLog('debug', 'Viewport element enabled')
 
     return () => {
+      appLog('debug', 'Destroying RenderingEngine')
+      stackReadyRef.current = false
       setViewportElement(null)
       engine.destroy()
       engineRef.current = null
@@ -39,18 +42,36 @@ export function Viewport() {
   // Load new stack when imageIds change
   useEffect(() => {
     if (!imageIds.length || !engineRef.current) return
+
+    stackReadyRef.current = false
     const viewport = engineRef.current.getViewport(VIEWPORT_ID) as IStackViewport
-    viewport.setStack(imageIds, 0).then(() => viewport.render())
+    appLog('debug', `setStack: ${imageIds.length} image(s)`)
+
+    viewport
+      .setStack(imageIds, 0)
+      .then(() => {
+        viewport.resetCamera()
+        viewport.render()
+        stackReadyRef.current = true
+        appLog('info', 'Stack loaded and rendered')
+      })
+      .catch((err: unknown) => {
+        appLog('error', 'setStack failed', err)
+      })
   }, [imageIds])
 
-  // Navigate to frame (cine / scrubber)
+  // Navigate to frame (cine / scrubber) — only after stack is ready
   useEffect(() => {
-    if (!imageIds.length || !engineRef.current) return
+    if (!stackReadyRef.current || !engineRef.current) return
+
     const viewport = engineRef.current.getViewport(VIEWPORT_ID) as IStackViewport
-    viewport.setImageIdIndex(currentImageIndex).catch(() => {
-      // Stack not yet initialised; setStack effect will handle the correct index
-    })
-  }, [currentImageIndex, imageIds])
+    viewport
+      .setImageIdIndex(currentImageIndex)
+      .then(() => viewport.render())
+      .catch(() => {
+        // Stack may be in the middle of loading a new set; setStack effect handles it
+      })
+  }, [currentImageIndex])
 
   return (
     <div
