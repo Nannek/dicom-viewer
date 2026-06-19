@@ -20,6 +20,7 @@ interface AppState {
   isLogOpen: boolean
 
   loadFiles: () => Promise<void>
+  loadFolder: () => Promise<void>
   setCurrentImageIndex: (i: number) => void
   setIsPlaying: (p: boolean) => void
   setPlaybackFps: (fps: number) => void
@@ -43,17 +44,17 @@ export const useAppStore = create<AppState>((set) => ({
       appLog('info', 'File dialog cancelled')
       return
     }
+    applyFiles(files, set)
+  },
 
-    appLog('info', `Loading ${files.length} file(s)`)
-    clearCache()
-    const sorted = sortByInstanceNumber(files)
-    const imageIds = sorted.flatMap((f) => storeBuffer(f.buffer))
-    const metadata = extractKnownTags(sorted[0].buffer)
-
-    appLog('info', `Stack ready: ${imageIds.length} frame(s)`, { imageIds })
-    appLog('debug', `Metadata extracted: ${metadata.length} tag(s)`)
-
-    set({ imageIds, currentImageIndex: 0, metadata, isPlaying: false })
+  loadFolder: async () => {
+    appLog('info', 'Opening folder dialog')
+    const files = await window.api.openFolder()
+    if (!files.length) {
+      appLog('info', 'Folder dialog cancelled or no DICOM files found')
+      return
+    }
+    applyFiles(files, set)
   },
 
   setCurrentImageIndex: (currentImageIndex) => set({ currentImageIndex }),
@@ -62,6 +63,17 @@ export const useAppStore = create<AppState>((set) => ({
   setActiveTool: (activeTool) => set({ activeTool }),
   toggleLogPanel: () => set((s) => ({ isLogOpen: !s.isLogOpen })),
 }))
+
+function applyFiles(files: DicomFileData[], set: (partial: Partial<AppState>) => void): void {
+  appLog('info', `Loading ${files.length} file(s)`)
+  clearCache()
+  const sorted = sortByInstanceNumber(files)
+  const imageIds = sorted.flatMap((f) => storeBuffer(f.buffer))
+  const metadata = extractKnownTags(sorted[0].buffer)
+  appLog('info', `Stack ready: ${imageIds.length} frame(s)`)
+  appLog('debug', `Metadata extracted: ${metadata.length} tag(s)`)
+  set({ imageIds, currentImageIndex: 0, metadata, isPlaying: false })
+}
 
 function sortByInstanceNumber(files: DicomFileData[]): DicomFileData[] {
   return [...files].sort((a, b) => {

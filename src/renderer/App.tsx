@@ -8,11 +8,16 @@ import { useAppStore } from './store'
 
 export default function App() {
   const loadFiles = useAppStore((s) => s.loadFiles)
+  const loadFolder = useAppStore((s) => s.loadFolder)
   const isLogOpen = useAppStore((s) => s.isLogOpen)
 
   useEffect(() => {
     return window.api.onTriggerOpen(() => loadFiles())
   }, [loadFiles])
+
+  useEffect(() => {
+    return window.api.onTriggerOpenFolder(() => loadFolder())
+  }, [loadFolder])
 
   return (
     <div className="app">

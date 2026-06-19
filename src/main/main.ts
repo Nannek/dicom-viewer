@@ -37,6 +37,11 @@ function buildMenu(win: BrowserWindow): Menu {
           accelerator: 'CmdOrCtrl+O',
           click: () => win.webContents.send(IPC.TRIGGER_OPEN),
         },
+        {
+          label: 'Open DICOM Folder...',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => win.webContents.send(IPC.TRIGGER_OPEN_FOLDER),
+        },
         { type: 'separator' },
         { role: 'quit' },
       ],

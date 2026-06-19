@@ -10,7 +10,7 @@ const TOOLS = [
 ]
 
 export function Toolbar() {
-  const { activeTool, setActiveTool, loadFiles, isLogOpen, toggleLogPanel } = useAppStore()
+  const { activeTool, setActiveTool, loadFiles, loadFolder, isLogOpen, toggleLogPanel } = useAppStore()
 
   function handleTool(toolName: string) {
     setActivePrimaryTool(toolName)
@@ -20,7 +20,10 @@ export function Toolbar() {
   return (
     <div className="toolbar">
       <button className="toolbar-btn open-btn" onClick={loadFiles}>
-        Open DICOM
+        Open Files
+      </button>
+      <button className="toolbar-btn open-btn" onClick={loadFolder} title="Open all DICOM files in a folder">
+        Open Folder
       </button>
       <div className="toolbar-separator" />
       {TOOLS.map((t) => (
