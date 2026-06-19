@@ -20,10 +20,10 @@ export default function App() {
       <div className="app-body">
         <div className="viewport-container">
           <Viewport />
-          <CinePlayer />
         </div>
         <MetadataPanel />
       </div>
+      <CinePlayer />
       {isLogOpen && <LogPanel />}
     </div>
   )

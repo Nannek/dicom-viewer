@@ -25,18 +25,18 @@ export function CinePlayer() {
   if (imageIds.length <= 1) return null
 
   return (
-    <div className="cine-player">
-      <button className="cine-btn" onClick={() => setIsPlaying(!isPlaying)} title={isPlaying ? 'Pause' : 'Play'}>
+    <div className="playback-bar">
+      <button className="pb-btn" onClick={() => setIsPlaying(!isPlaying)} title={isPlaying ? 'Pause' : 'Play'}>
         {isPlaying ? '⏸' : '▶'}
       </button>
 
-      <span className="cine-counter">
-        {currentImageIndex + 1}&nbsp;/&nbsp;{imageIds.length}
+      <span className="pb-counter">
+        {currentImageIndex + 1}&thinsp;/&thinsp;{imageIds.length}
       </span>
 
       <input
         type="range"
-        className="cine-scrubber"
+        className="pb-scrubber"
         min={0}
         max={imageIds.length - 1}
         value={currentImageIndex}
@@ -46,12 +46,12 @@ export function CinePlayer() {
         }}
       />
 
-      <label className="cine-fps">
+      <label className="pb-fps">
         <span>{playbackFps} fps</span>
         <input
           type="range"
           min={1}
-          max={30}
+          max={60}
           value={playbackFps}
           onChange={(e) => setPlaybackFps(Number(e.target.value))}
         />

@@ -47,7 +47,7 @@ export const useAppStore = create<AppState>((set) => ({
     appLog('info', `Loading ${files.length} file(s)`)
     clearCache()
     const sorted = sortByInstanceNumber(files)
-    const imageIds = sorted.map((f) => storeBuffer(f.buffer))
+    const imageIds = sorted.flatMap((f) => storeBuffer(f.buffer))
     const metadata = extractKnownTags(sorted[0].buffer)
 
     appLog('info', `Stack ready: ${imageIds.length} frame(s)`, { imageIds })

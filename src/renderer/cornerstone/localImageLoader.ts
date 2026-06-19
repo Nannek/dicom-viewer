@@ -1,3 +1,13 @@
+/**
+ * Custom Cornerstone3D image loader using dicom-parser directly.
+ * Handles uncompressed transfer syntaxes (Explicit/Implicit VR Little Endian,
+ * the large majority of clinical DICOM files) including multi-frame DICOM.
+ *
+ * To support compressed DICOM (JPEG, JPEG 2000, JPEG-LS), replace this with
+ * @cornerstonejs/dicom-image-loader once the Vite/IIFE codec bundling conflict
+ * is resolved upstream, or when switching to a webpack-based renderer build.
+ */
+
 import { imageLoader, metaData, utilities, Enums, cache } from '@cornerstonejs/core'
 import type { IImage } from '@cornerstonejs/core/types'
 import dicomParser from 'dicom-parser'
@@ -6,6 +16,16 @@ import { appLog } from '../logger'
 export const SCHEME = 'dicomlocal'
 
 const bufferCache = new Map<string, ArrayBuffer>()
+const allImageIds = new Set<string>()
+
+// Parse 'dicomlocal:<id>' or 'dicomlocal:<id>:<frameIndex>' imageIds.
+function parseImageId(imageId: string): { baseKey: string; frameIndex: number } {
+  const parts = imageId.split(':')
+  if (parts.length === 3) {
+    return { baseKey: `${parts[0]}:${parts[1]}`, frameIndex: parseInt(parts[2], 10) }
+  }
+  return { baseKey: imageId, frameIndex: 0 }
+}
 
 interface DicomMeta {
   imagePixelModule: {
@@ -33,7 +53,8 @@ let idCounter = 0
 
 function localMetadataProvider(type: string, imageId: string): unknown {
   if (!imageId.startsWith(SCHEME + ':')) return undefined
-  const m = metaCache.get(imageId)
+  const { baseKey } = parseImageId(imageId)
+  const m = metaCache.get(baseKey)
   if (!m) return undefined
   return (m as Record<string, unknown>)[type]
 }
@@ -45,33 +66,52 @@ export function registerLocalImageLoader(): void {
     promise: buildImage(imageId),
     cancelFn: undefined,
     decache: () => {
-      bufferCache.delete(imageId)
-      metaCache.delete(imageId)
+      allImageIds.delete(imageId)
     },
   }))
 }
 
-export function storeBuffer(buffer: ArrayBuffer): string {
-  const imageId = `${SCHEME}:${++idCounter}`
-  bufferCache.set(imageId, buffer)
-  return imageId
+/** Store a buffer and return one imageId per frame (≥1). */
+export function storeBuffer(buffer: ArrayBuffer): string[] {
+  const baseId = `${SCHEME}:${++idCounter}`
+  bufferCache.set(baseId, buffer)
+
+  try {
+    const dataset = dicomParser.parseDicom(new Uint8Array(buffer))
+    const numFrames = Math.max(1, parseInt(dataset.string('x00280008') ?? '1', 10) || 1)
+    if (numFrames > 1) {
+      appLog('info', `Multi-frame DICOM detected: ${numFrames} frames`)
+      const ids = Array.from({ length: numFrames }, (_, i) => `${baseId}:${i}`)
+      ids.forEach((id) => allImageIds.add(id))
+      return ids
+    }
+  } catch {
+    // fall through — treat as single frame
+  }
+
+  allImageIds.add(baseId)
+  return [baseId]
 }
 
 export function clearCache(): void {
-  // Evict old images from CS3D's cache before clearing our maps.
+  // Evict all known imageIds from CS3D's image cache before clearing our maps.
   // idCounter is intentionally NOT reset — IDs must stay unique across loads so
   // CS3D doesn't serve a stale cached image under a reused ID.
-  for (const imageId of bufferCache.keys()) {
-    if (cache.getImageLoadObject(imageId)) {
-      cache.removeImageLoadObject(imageId)
+  for (const imageId of allImageIds) {
+    try {
+      if (cache.getImageLoadObject(imageId)) cache.removeImageLoadObject(imageId)
+    } catch {
+      // ignore
     }
   }
+  allImageIds.clear()
   bufferCache.clear()
   metaCache.clear()
 }
 
 async function buildImage(imageId: string): Promise<IImage> {
-  const buffer = bufferCache.get(imageId)
+  const { baseKey, frameIndex } = parseImageId(imageId)
+  const buffer = bufferCache.get(baseKey)
   if (!buffer) throw new Error(`No buffer cached for ${imageId}`)
 
   const byteArray = new Uint8Array(buffer)
@@ -111,20 +151,24 @@ async function buildImage(imageId: string): Promise<IImage> {
     throw new Error('DICOM file has no Pixel Data element')
   }
 
-  const rawBytes = byteArray.slice(el.dataOffset, el.dataOffset + el.length)
+  // For multi-frame: extract just this frame's bytes from the flat pixel data block.
+  const frameSizeBytes = rows * cols * (bitsAllocated / 8) * samplesPerPixel
+  const frameByteOffset = frameIndex * frameSizeBytes
+  const rawBytes = byteArray.slice(
+    el.dataOffset + frameByteOffset,
+    el.dataOffset + frameByteOffset + frameSizeBytes,
+  )
 
-  // Decode raw pixel values into a typed array matching the DICOM storage format
   type RawPixelType = Uint8Array | Uint16Array | Int16Array
   let rawPixels: RawPixelType
   if (bitsAllocated === 8) {
     rawPixels = rawBytes
   } else if (bitsAllocated === 16) {
-    if (isSigned) {
-      rawPixels = new Int16Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 2)
-    } else {
-      rawPixels = new Uint16Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 2)
-    }
+    rawPixels = isSigned
+      ? new Int16Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 2)
+      : new Uint16Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 2)
   } else {
+    appLog('error', `Unsupported Bits Allocated: ${bitsAllocated} in ${imageId}`)
     throw new Error(`Unsupported Bits Allocated: ${bitsAllocated}`)
   }
 
@@ -155,37 +199,35 @@ async function buildImage(imageId: string): Promise<IImage> {
     windowCenter = parseFloat(wcStr.split('\\')[0])
     windowWidth = parseFloat(wwStr.split('\\')[0])
   } else {
-    // Fall back to full pixel range so the image is visible even without W/L tags
     windowWidth = Math.max(maxVal - minVal, 1)
     windowCenter = minVal + windowWidth / 2
   }
 
-  // Register metadata so CS3D's buildMetadata() can look up imagePixelModule,
-  // generalSeriesModule, and imagePlaneModule by imageId.
-  metaCache.set(imageId, {
-    imagePixelModule: {
-      pixelRepresentation,
-      bitsAllocated,
-      bitsStored,
-      highBit,
-      photometricInterpretation: photometric,
-      samplesPerPixel,
-    },
-    generalSeriesModule: { modality },
-    imagePlaneModule: {
-      rowPixelSpacing: rowSpacing,
-      columnPixelSpacing: colSpacing,
-      rowCosines,
-      columnCosines,
-      imagePositionPatient,
-      imageOrientationPatient,
-      usingDefaultValues: !ippRaw,
-    },
-    scalingModule: { rescaleSlope: slope, rescaleIntercept: intercept },
-  })
+  // Register metadata keyed by baseKey so all frames of a multi-frame file share it.
+  if (!metaCache.has(baseKey)) {
+    metaCache.set(baseKey, {
+      imagePixelModule: {
+        pixelRepresentation,
+        bitsAllocated,
+        bitsStored,
+        highBit,
+        photometricInterpretation: photometric,
+        samplesPerPixel,
+      },
+      generalSeriesModule: { modality },
+      imagePlaneModule: {
+        rowPixelSpacing: rowSpacing,
+        columnPixelSpacing: colSpacing,
+        rowCosines,
+        columnCosines,
+        imagePositionPatient,
+        imageOrientationPatient,
+        usingDefaultValues: !ippRaw,
+      },
+      scalingModule: { rescaleSlope: slope, rescaleIntercept: intercept },
+    })
+  }
 
-  // Build voxelManager with pre-scaled Float32 data so CS3D's ensureVoxelManager()
-  // skips, and the VTK scalar range matches the HU-space windowCenter/windowWidth.
   const voxelManager = utilities.VoxelManager.createImageVoxelManager({
     scalarData: scaledPixels,
     width: cols,
@@ -193,7 +235,10 @@ async function buildImage(imageId: string): Promise<IImage> {
     numberOfComponents: samplesPerPixel,
   })
 
-  appLog('debug', `Image built: ${cols}×${rows} ${bitsAllocated}bit ${modality} WC=${windowCenter} WW=${windowWidth}`)
+  appLog(
+    'debug',
+    `Image built: ${cols}×${rows} ${bitsAllocated}bit ${modality} frame=${frameIndex} WC=${windowCenter} WW=${windowWidth}`,
+  )
 
   return {
     imageId,
