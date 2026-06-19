@@ -69,13 +69,22 @@ async function buildImage(imageId: string): Promise<IImage> {
   // Copy pixel data to guarantee alignment for typed array views
   const rawBytes = byteArray.slice(el.dataOffset, el.dataOffset + el.length)
 
-  let pixelData: Uint8Array | Uint16Array | Int16Array
+  type PixelType = Uint8Array | Uint16Array | Int16Array
+  type DataTypeString = 'Uint8Array' | 'Uint16Array' | 'Int16Array'
+
+  let pixelData: PixelType
+  let dataType: DataTypeString
   if (bitsAllocated === 8) {
     pixelData = rawBytes
+    dataType = 'Uint8Array'
   } else if (bitsAllocated === 16) {
-    pixelData = isSigned
-      ? new Int16Array(rawBytes.buffer)
-      : new Uint16Array(rawBytes.buffer)
+    if (isSigned) {
+      pixelData = new Int16Array(rawBytes.buffer)
+      dataType = 'Int16Array'
+    } else {
+      pixelData = new Uint16Array(rawBytes.buffer)
+      dataType = 'Uint16Array'
+    }
   } else {
     appLog('error', `Unsupported Bits Allocated: ${bitsAllocated} in ${imageId}`)
     throw new Error(`Unsupported Bits Allocated: ${bitsAllocated}`)
@@ -131,6 +140,7 @@ async function buildImage(imageId: string): Promise<IImage> {
     rowPixelSpacing: rowSpacing,
     sizeInBytes: el.length,
     photometricInterpretation: photometric,
+    dataType,
   } satisfies IImage
 }
 
