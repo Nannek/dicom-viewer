@@ -1,0 +1,14 @@
+appId: com.dicomviewer
+productName: DICOM Viewer
+directories:
+  output: dist
+files:
+  - out/**/*
+win:
+  target:
+    - target: nsis
+      arch: x64
+mac:
+  target: dmg
+linux:
+  target: AppImage

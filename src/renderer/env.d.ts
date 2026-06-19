@@ -1,0 +1,12 @@
+/// <reference types="vite/client" />
+
+import type { DicomFileData } from '../shared/types'
+
+declare global {
+  interface Window {
+    api: {
+      openFiles: () => Promise<DicomFileData[]>
+      onTriggerOpen: (callback: () => void) => () => void
+    }
+  }
+}
