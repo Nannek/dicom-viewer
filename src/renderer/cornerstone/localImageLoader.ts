@@ -106,24 +106,37 @@ async function buildImage(imageId: string): Promise<IImage> {
 
   const rawBytes = byteArray.slice(el.dataOffset, el.dataOffset + el.length)
 
-  type PixelType = Uint8Array | Uint16Array | Int16Array
-  type DataTypeString = 'Uint8Array' | 'Uint16Array' | 'Int16Array'
-
-  let pixelData: PixelType
-  let dataType: DataTypeString
+  // Decode raw pixel values into a typed array matching the DICOM storage format
+  type RawPixelType = Uint8Array | Uint16Array | Int16Array
+  let rawPixels: RawPixelType
   if (bitsAllocated === 8) {
-    pixelData = rawBytes
-    dataType = 'Uint8Array'
+    rawPixels = rawBytes
   } else if (bitsAllocated === 16) {
     if (isSigned) {
-      pixelData = new Int16Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 2)
-      dataType = 'Int16Array'
+      rawPixels = new Int16Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 2)
     } else {
-      pixelData = new Uint16Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 2)
-      dataType = 'Uint16Array'
+      rawPixels = new Uint16Array(rawBytes.buffer, rawBytes.byteOffset, rawBytes.byteLength / 2)
     }
   } else {
     throw new Error(`Unsupported Bits Allocated: ${bitsAllocated}`)
+  }
+
+  // CS3D v5 puts pixel data directly into the VTK scalar array and then sets the VTK
+  // transfer function range from windowCenter/windowWidth. Those W/L values are in
+  // Hounsfield-unit (post-rescale) space, but the VTK scalars must also be in that
+  // same space — otherwise there is a mismatch and everything renders white.
+  // Solution: pre-apply the modality LUT (slope/intercept) to produce Float32 HU values,
+  // mark the image as pre-scaled, and keep W/L in HU space. This matches what
+  // @cornerstonejs/dicom-image-loader does internally.
+  const numPixels = rawPixels.length
+  const scaledPixels = new Float32Array(numPixels)
+  let minVal = Infinity,
+    maxVal = -Infinity
+  for (let i = 0; i < numPixels; i++) {
+    const hu = (rawPixels[i] as number) * slope + intercept
+    scaledPixels[i] = hu
+    if (hu < minVal) minVal = hu
+    if (hu > maxVal) maxVal = hu
   }
 
   let windowCenter: number
@@ -135,21 +148,10 @@ async function buildImage(imageId: string): Promise<IImage> {
     windowCenter = parseFloat(wcStr.split('\\')[0])
     windowWidth = parseFloat(wwStr.split('\\')[0])
   } else {
-    let lo = Infinity,
-      hi = -Infinity
-    for (let i = 0; i < pixelData.length; i++) {
-      const v = pixelData[i] as number
-      if (v < lo) lo = v
-      if (v > hi) hi = v
-    }
-    const loHU = lo * slope + intercept
-    const hiHU = hi * slope + intercept
-    windowWidth = Math.max(hiHU - loHU, 1)
-    windowCenter = loHU + windowWidth / 2
+    // Fall back to full pixel range so the image is visible even without W/L tags
+    windowWidth = Math.max(maxVal - minVal, 1)
+    windowCenter = minVal + windowWidth / 2
   }
-
-  const maxStorable = isSigned ? (1 << (bitsStored - 1)) - 1 : (1 << bitsStored) - 1
-  const minStorable = isSigned ? -(1 << (bitsStored - 1)) : 0
 
   // Register metadata so CS3D's buildMetadata() can look up imagePixelModule,
   // generalSeriesModule, and imagePlaneModule by imageId.
@@ -175,10 +177,10 @@ async function buildImage(imageId: string): Promise<IImage> {
     scalingModule: { rescaleSlope: slope, rescaleIntercept: intercept },
   })
 
-  // Build voxelManager directly so CS3D's ensureVoxelManager() skips the
-  // `delete image.imageFrame.pixelData` line that would throw for custom loaders.
+  // Build voxelManager with pre-scaled Float32 data so CS3D's ensureVoxelManager()
+  // skips, and the VTK scalar range matches the HU-space windowCenter/windowWidth.
   const voxelManager = utilities.VoxelManager.createImageVoxelManager({
-    scalarData: pixelData,
+    scalarData: scaledPixels,
     width: cols,
     height: rows,
     numberOfComponents: samplesPerPixel,
@@ -188,15 +190,15 @@ async function buildImage(imageId: string): Promise<IImage> {
 
   return {
     imageId,
-    minPixelValue: minStorable,
-    maxPixelValue: maxStorable,
-    slope,
-    intercept,
+    minPixelValue: minVal,
+    maxPixelValue: maxVal,
+    slope: 1,
+    intercept: 0,
     windowCenter,
     windowWidth,
     voiLUTFunction: Enums.VOILUTFunctionType.LINEAR,
-    getPixelData: () => pixelData,
-    getCanvas: () => renderToCanvas(pixelData, rows, cols, slope, intercept, windowCenter, windowWidth),
+    getPixelData: () => scaledPixels,
+    getCanvas: () => renderToCanvas(scaledPixels, rows, cols, windowCenter, windowWidth),
     rows,
     columns: cols,
     height: rows,
@@ -207,19 +209,23 @@ async function buildImage(imageId: string): Promise<IImage> {
     numberOfComponents: samplesPerPixel,
     columnPixelSpacing: colSpacing,
     rowPixelSpacing: rowSpacing,
-    sizeInBytes: el.length,
+    sizeInBytes: numPixels * 4,
     photometricInterpretation: photometric,
-    dataType,
+    dataType: 'Float32Array',
+    isPreScaled: true,
+    preScale: {
+      enabled: true,
+      scaled: true,
+      scalingParameters: { rescaleSlope: slope, rescaleIntercept: intercept },
+    },
     voxelManager,
   } satisfies IImage
 }
 
 function renderToCanvas(
-  pixelData: Uint8Array | Uint16Array | Int16Array,
+  scaledPixels: Float32Array,
   rows: number,
   cols: number,
-  slope: number,
-  intercept: number,
   windowCenter: number,
   windowWidth: number,
 ): HTMLCanvasElement {
@@ -233,8 +239,7 @@ function renderToCanvas(
   const halfWW = windowWidth / 2
 
   for (let i = 0, n = rows * cols; i < n; i++) {
-    const hu = (pixelData[i] as number) * slope + intercept
-    const t = Math.min(1, Math.max(0, (hu - windowCenter + halfWW) / windowWidth))
+    const t = Math.min(1, Math.max(0, (scaledPixels[i] - windowCenter + halfWW) / windowWidth))
     const byte = Math.round(t * 255)
     imgData.data[i * 4] = byte
     imgData.data[i * 4 + 1] = byte
