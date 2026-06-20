@@ -12,6 +12,7 @@ import {
   WindowLevelTool,
   PanTool,
   ZoomTool,
+  TrackballRotateTool,
   ToolGroupManager,
   Enums as ToolEnums,
 } from '@cornerstonejs/tools'
@@ -37,6 +38,7 @@ export const VOLUME_3D_PRESETS = [
 ] as const
 
 const MPR_TOOL_GROUP_ID = 'mpr-tool-group'
+const VOL3D_TOOL_GROUP_ID = 'mpr-3d-tool-group'
 const VOLUME_SCHEME = 'cornerstoneStreamingImageVolume'
 
 let volumeLoaderRegistered = false
@@ -114,6 +116,7 @@ export async function setupMpr(
   vp3d.setProperties({ preset: initialPreset })
 
   setupMprToolGroup()
+  setupVol3dToolGroup()
   engine.renderViewports(Object.values(MPR_VIEWPORT_IDS))
   appLog('info', 'MPR + 3D ready')
 }
@@ -131,7 +134,6 @@ function setupMprToolGroup(): void {
   const existing = ToolGroupManager.getToolGroup(MPR_TOOL_GROUP_ID)
   if (existing) ToolGroupManager.destroyToolGroup(MPR_TOOL_GROUP_ID)
 
-  // addTool is idempotent — safe to call if already registered globally
   addTool(CrosshairsTool)
   addTool(WindowLevelTool)
   addTool(PanTool)
@@ -144,7 +146,9 @@ function setupMprToolGroup(): void {
   tg.addTool(PanTool.toolName)
   tg.addTool(ZoomTool.toolName)
 
-  for (const vpId of Object.values(MPR_VIEWPORT_IDS)) {
+  // Only slice viewports get crosshairs — VOLUME_3D has its own group
+  const sliceViewportIds = [MPR_VIEWPORT_IDS.AXIAL, MPR_VIEWPORT_IDS.SAGITTAL, MPR_VIEWPORT_IDS.CORONAL]
+  for (const vpId of sliceViewportIds) {
     tg.addViewport(vpId, RENDERING_ENGINE_ID)
   }
 
@@ -161,9 +165,42 @@ function setupMprToolGroup(): void {
   tg.setToolPassive(WindowLevelTool.toolName)
 }
 
+function setupVol3dToolGroup(): void {
+  const existing = ToolGroupManager.getToolGroup(VOL3D_TOOL_GROUP_ID)
+  if (existing) ToolGroupManager.destroyToolGroup(VOL3D_TOOL_GROUP_ID)
+
+  addTool(TrackballRotateTool)
+  addTool(PanTool)
+  addTool(ZoomTool)
+
+  const tg = ToolGroupManager.createToolGroup(VOL3D_TOOL_GROUP_ID)!
+
+  tg.addTool(TrackballRotateTool.toolName)
+  tg.addTool(PanTool.toolName)
+  tg.addTool(ZoomTool.toolName)
+
+  tg.addViewport(MPR_VIEWPORT_IDS.VOLUME_3D, RENDERING_ENGINE_ID)
+
+  const { MouseBindings } = ToolEnums
+  tg.setToolActive(TrackballRotateTool.toolName, {
+    bindings: [{ mouseButton: MouseBindings.Primary }],
+  })
+  tg.setToolActive(PanTool.toolName, {
+    bindings: [{ mouseButton: MouseBindings.Auxiliary }],
+  })
+  tg.setToolActive(ZoomTool.toolName, {
+    bindings: [{ mouseButton: MouseBindings.Secondary }],
+  })
+}
+
 export function teardownMpr(): void {
   try {
     ToolGroupManager.destroyToolGroup(MPR_TOOL_GROUP_ID)
+  } catch {
+    // already destroyed or never created
+  }
+  try {
+    ToolGroupManager.destroyToolGroup(VOL3D_TOOL_GROUP_ID)
   } catch {
     // already destroyed or never created
   }
