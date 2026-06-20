@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
-import { RenderingEngine, Enums } from '@cornerstonejs/core'
+import { useEffect, useRef, useState } from 'react'
+import { RenderingEngine, Enums, cache } from '@cornerstonejs/core'
+import { Enums as ToolEnums } from '@cornerstonejs/tools'
 import type { IStackViewport } from '@cornerstonejs/core/types'
 import { setupToolGroup } from '../cornerstone/tools'
 import { setViewportElement, RENDERING_ENGINE_ID, VIEWPORT_ID } from '../cornerstone/viewportRef'
@@ -10,6 +11,7 @@ export function Viewport() {
   const elementRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<RenderingEngine | null>(null)
   const stackReadyRef = useRef(false)
+  const [huValue, setHuValue] = useState<number | null>(null)
   const { imageIds, currentImageIndex } = useAppStore()
 
   // Initialize rendering engine once on mount
@@ -30,10 +32,32 @@ export function Viewport() {
     setupToolGroup(VIEWPORT_ID, RENDERING_ENGINE_ID)
     appLog('debug', 'Viewport element enabled')
 
+    const el = elementRef.current
+    const handleHuMove = (evt: Event) => {
+      const detail = (evt as CustomEvent<{ currentPoints: { image: { x: number; y: number } } }>)
+        .detail
+      const { x, y } = detail.currentPoints.image
+      const viewport = engine.getViewport(VIEWPORT_ID) as IStackViewport
+      const imageId = viewport.getCurrentImageId()
+      if (!imageId) return
+      const image = cache.getImage(imageId)
+      if (!image) return
+      const col = Math.floor(x)
+      const row = Math.floor(y)
+      if (col >= 0 && col < image.columns && row >= 0 && row < image.rows) {
+        setHuValue((image.getPixelData() as Float32Array)[row * image.columns + col])
+      }
+    }
+    const handleHuLeave = () => setHuValue(null)
+    el.addEventListener(ToolEnums.Events.MOUSE_MOVE, handleHuMove)
+    el.addEventListener('mouseleave', handleHuLeave)
+
     return () => {
       appLog('debug', 'Destroying RenderingEngine')
       stackReadyRef.current = false
       setViewportElement(null)
+      el.removeEventListener(ToolEnums.Events.MOUSE_MOVE, handleHuMove)
+      el.removeEventListener('mouseleave', handleHuLeave)
       engine.destroy()
       engineRef.current = null
     }
@@ -74,10 +98,13 @@ export function Viewport() {
   }, [currentImageIndex])
 
   return (
-    <div
-      ref={elementRef}
-      style={{ width: '100%', height: '100%' }}
-      onContextMenu={(e) => e.preventDefault()}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div
+        ref={elementRef}
+        style={{ width: '100%', height: '100%' }}
+        onContextMenu={(e) => e.preventDefault()}
+      />
+      {huValue !== null && <div className="hu-overlay">HU: {Math.round(huValue)}</div>}
+    </div>
   )
 }

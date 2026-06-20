@@ -134,6 +134,21 @@ body {
   overflow: hidden;
 }
 
+/* ── HU Overlay ──────────────────────────────────────── */
+
+.hu-overlay {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
+  font-size: 13px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
 /* ── Playback Bar ─────────────────────────────────────── */
 
 .playback-bar {
