@@ -1,17 +1,16 @@
 /**
  * Custom Cornerstone3D image loader using dicom-parser directly.
- * Handles uncompressed transfer syntaxes (Explicit/Implicit VR Little Endian,
- * the large majority of clinical DICOM files) including multi-frame DICOM.
- *
- * To support compressed DICOM (JPEG, JPEG 2000, JPEG-LS), replace this with
- * @cornerstonejs/dicom-image-loader once the Vite/IIFE codec bundling conflict
- * is resolved upstream, or when switching to a webpack-based renderer build.
+ * Handles uncompressed transfer syntaxes (Explicit/Implicit VR Little Endian)
+ * including multi-frame DICOM. Compressed transfer syntaxes (JPEG, JPEG 2000,
+ * JPEG-LS) are detected and delegated to @cornerstonejs/dicom-image-loader via
+ * wadouri blob URLs.
  */
 
 import { imageLoader, metaData, utilities, Enums, cache } from '@cornerstonejs/core'
 import type { IImage } from '@cornerstonejs/core/types'
 import dicomParser from 'dicom-parser'
 import { appLog } from '../logger'
+import { createWadouriImageId, revokeCompressedBlobs } from './compressedLoader'
 
 export const SCHEME = 'dicomlocal'
 
@@ -71,13 +70,29 @@ export function registerLocalImageLoader(): void {
   }))
 }
 
+const UNCOMPRESSED_TRANSFER_SYNTAXES = new Set([
+  '1.2.840.10008.1.2',   // Implicit VR Little Endian
+  '1.2.840.10008.1.2.1', // Explicit VR Little Endian
+  '1.2.840.10008.1.2.2', // Explicit VR Big Endian
+  '',                     // absent / unknown — assume uncompressed
+])
+
 /** Store a buffer and return one imageId per frame (≥1). */
 export function storeBuffer(buffer: ArrayBuffer): string[] {
   const baseId = `${SCHEME}:${++idCounter}`
-  bufferCache.set(baseId, buffer)
 
   try {
     const dataset = dicomParser.parseDicom(new Uint8Array(buffer))
+    const transferSyntax = dataset.string('x00020010')?.trim() ?? ''
+
+    if (!UNCOMPRESSED_TRANSFER_SYNTAXES.has(transferSyntax)) {
+      appLog('info', `Compressed transfer syntax ${transferSyntax} — delegating to dicom-image-loader`)
+      const id = createWadouriImageId(buffer)
+      allImageIds.add(id)
+      return [id]
+    }
+
+    bufferCache.set(baseId, buffer)
     const numFrames = Math.max(1, parseInt(dataset.string('x00280008') ?? '1', 10) || 1)
     if (numFrames > 1) {
       appLog('info', `Multi-frame DICOM detected: ${numFrames} frames`)
@@ -86,7 +101,8 @@ export function storeBuffer(buffer: ArrayBuffer): string[] {
       return ids
     }
   } catch {
-    // fall through — treat as single frame
+    // fall through — treat as single uncompressed frame
+    bufferCache.set(baseId, buffer)
   }
 
   allImageIds.add(baseId)
@@ -97,6 +113,7 @@ export function clearCache(): void {
   // Evict all known imageIds from CS3D's image cache before clearing our maps.
   // idCounter is intentionally NOT reset — IDs must stay unique across loads so
   // CS3D doesn't serve a stale cached image under a reused ID.
+  revokeCompressedBlobs()
   for (const imageId of allImageIds) {
     try {
       if (cache.getImageLoadObject(imageId)) cache.removeImageLoadObject(imageId)

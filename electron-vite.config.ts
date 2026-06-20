@@ -10,6 +10,10 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
   },
   renderer: {
+    assetsInclude: ['**/*.wasm', '**/*.js.mem'],
+    worker: {
+      format: 'es',
+    },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer'),
