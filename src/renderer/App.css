@@ -138,11 +138,10 @@ body {
 
 .mpr-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  /* grid-template-columns/rows are set inline by MprViewport */
+  position: relative;
   width: 100%;
   height: 100%;
-  gap: 2px;
   background: #111;
 }
 
@@ -155,30 +154,70 @@ body {
 }
 
 .mpr-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 3px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
-.mpr-label-3d {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 2px 8px;
+.mpr-label-text {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 .mpr-preset-select {
   font-size: 11px;
   padding: 2px 6px;
-  text-transform: none;
-  letter-spacing: 0;
+}
+
+.mpr-maximize-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 0 3px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.mpr-maximize-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.mpr-gutter {
+  background: #111;
+  z-index: 5;
+}
+
+.mpr-gutter-v {
+  cursor: col-resize;
+}
+
+.mpr-gutter-v:hover,
+.mpr-gutter-v:active {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+.mpr-gutter-h {
+  cursor: row-resize;
+}
+
+.mpr-gutter-h:hover,
+.mpr-gutter-h:active {
+  background: var(--accent);
+  opacity: 0.5;
 }
 
 .mpr-viewport-el {
