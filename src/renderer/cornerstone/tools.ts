@@ -9,7 +9,7 @@ import {
   Enums,
 } from '@cornerstonejs/tools'
 
-const { MouseBindings } = Enums
+const { MouseBindings, KeyboardBindings } = Enums
 
 export const TOOL_GROUP_ID = 'dicom-tool-group'
 
@@ -42,7 +42,10 @@ export function setupToolGroup(viewportId: string, renderingEngineId: string): v
     bindings: [{ mouseButton: MouseBindings.Auxiliary }],
   })
   toolGroup.setToolActive(ZoomTool.toolName, {
-    bindings: [{ mouseButton: MouseBindings.Secondary }],
+    bindings: [
+      { mouseButton: MouseBindings.Secondary },
+      { mouseButton: MouseBindings.Wheel, modifierKey: KeyboardBindings.Ctrl },
+    ],
   })
   // Mouse wheel scrolls through stack frames
   toolGroup.setToolActive(StackScrollTool.toolName, {
@@ -64,6 +67,13 @@ export function setActivePrimaryTool(toolName: string): void {
   primaryTools.forEach((t) => {
     if (t === toolName) {
       toolGroup.setToolActive(t, { bindings: [{ mouseButton: MouseBindings.Primary }] })
+    } else if (t === ZoomTool.toolName) {
+      toolGroup.setToolActive(t, {
+        bindings: [
+          { mouseButton: MouseBindings.Secondary },
+          { mouseButton: MouseBindings.Wheel, modifierKey: KeyboardBindings.Ctrl },
+        ],
+      })
     } else {
       toolGroup.setToolPassive(t)
     }

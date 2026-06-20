@@ -152,7 +152,7 @@ function setupMprToolGroup(): void {
     tg.addViewport(vpId, RENDERING_ENGINE_ID)
   }
 
-  const { MouseBindings } = ToolEnums
+  const { MouseBindings, KeyboardBindings } = ToolEnums
   tg.setToolActive(CrosshairsTool.toolName, {
     bindings: [{ mouseButton: MouseBindings.Primary }],
   })
@@ -160,7 +160,10 @@ function setupMprToolGroup(): void {
     bindings: [{ mouseButton: MouseBindings.Auxiliary }],
   })
   tg.setToolActive(ZoomTool.toolName, {
-    bindings: [{ mouseButton: MouseBindings.Secondary }],
+    bindings: [
+      { mouseButton: MouseBindings.Secondary },
+      { mouseButton: MouseBindings.Wheel, modifierKey: KeyboardBindings.Ctrl },
+    ],
   })
   tg.setToolPassive(WindowLevelTool.toolName)
 }
@@ -181,7 +184,7 @@ function setupVol3dToolGroup(): void {
 
   tg.addViewport(MPR_VIEWPORT_IDS.VOLUME_3D, RENDERING_ENGINE_ID)
 
-  const { MouseBindings } = ToolEnums
+  const { MouseBindings, KeyboardBindings } = ToolEnums
   tg.setToolActive(TrackballRotateTool.toolName, {
     bindings: [{ mouseButton: MouseBindings.Primary }],
   })
@@ -189,7 +192,10 @@ function setupVol3dToolGroup(): void {
     bindings: [{ mouseButton: MouseBindings.Auxiliary }],
   })
   tg.setToolActive(ZoomTool.toolName, {
-    bindings: [{ mouseButton: MouseBindings.Secondary }],
+    bindings: [
+      { mouseButton: MouseBindings.Secondary },
+      { mouseButton: MouseBindings.Wheel, modifierKey: KeyboardBindings.Ctrl },
+    ],
   })
 }
 
