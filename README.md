@@ -10,7 +10,7 @@ A desktop application for viewing and inspecting DICOM medical images. Built wit
 - Named window/level presets: Brain, Soft Tissue, Abdomen, Lung, Bone
 - Hounsfield Unit (HU) readout — value under cursor shown as overlay
 - Export current viewport frame as PNG
-- Multi-Planar Reconstruction (MPR) — axial, sagittal, and coronal views for CT series
+- Multi-Planar Reconstruction (MPR) — axial, sagittal, coronal, and 3D volume rendering for CT series
 - Mouse wheel stack navigation
 - DICOM metadata inspection panel with searchable tag table
 - Debug log panel
@@ -96,9 +96,9 @@ Always-available bindings regardless of active tool:
 
 Move the mouse over the viewport to see the Hounsfield Unit (HU) value at the cursor position displayed in the bottom-left corner. Useful reference values: air ≈ −1000, water ≈ 0, soft tissue ≈ 20–80, bone ≈ 400–1000.
 
-### MPR (Multi-Planar Reconstruction)
+### MPR (Multi-Planar Reconstruction) + 3D Volume
 
-Click **MPR** to switch to a three-pane view showing axial, sagittal, and coronal reformats of the loaded CT volume. Left-drag the crosshairs in any pane to navigate all three planes simultaneously. Click **MPR** again to return to single-pane stack view.
+Click **MPR** to switch to a 2×2 grid with axial, sagittal, coronal reformats and a 3D volume rendering pane. Left-drag the crosshairs in any slice pane to navigate all three planes simultaneously. Use the **preset selector** in the 3D pane to switch rendering modes (CT Bone, CT Lung, CT Soft Tissue, CT MIP, etc.). Click **MPR** again to return to single-pane stack view.
 
 MPR requires a CT series loaded as a multi-slice stack (via Open Folder) with Image Position Patient metadata (tag 0020,0032). X-ray single images and series without position metadata will show a geometric approximation.
 

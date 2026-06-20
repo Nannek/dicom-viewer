@@ -22,7 +22,19 @@ export const MPR_VIEWPORT_IDS = {
   AXIAL: 'mpr-axial',
   SAGITTAL: 'mpr-sagittal',
   CORONAL: 'mpr-coronal',
+  VOLUME_3D: 'mpr-3d',
 } as const
+
+export const VOLUME_3D_PRESETS = [
+  { label: 'CT Bone', value: 'CT-Bone' },
+  { label: 'CT Bone (alt)', value: 'CT-Bones' },
+  { label: 'CT Soft Tissue', value: 'CT-Soft-Tissue' },
+  { label: 'CT Muscle', value: 'CT-Muscle' },
+  { label: 'CT Lung', value: 'CT-Lung' },
+  { label: 'CT MIP', value: 'CT-MIP' },
+  { label: 'CT Cardiac', value: 'CT-Cardiac' },
+  { label: 'CT Chest Vessels', value: 'CT-Chest-Vessels' },
+] as const
 
 const MPR_TOOL_GROUP_ID = 'mpr-tool-group'
 const VOLUME_SCHEME = 'cornerstoneStreamingImageVolume'
@@ -38,7 +50,13 @@ function ensureVolumeLoaderRegistered(): void {
 
 export async function setupMpr(
   imageIds: string[],
-  elements: { axial: HTMLDivElement; sagittal: HTMLDivElement; coronal: HTMLDivElement },
+  elements: {
+    axial: HTMLDivElement
+    sagittal: HTMLDivElement
+    coronal: HTMLDivElement
+    vol3d: HTMLDivElement
+  },
+  initialPreset = 'CT-Bone',
 ): Promise<void> {
   const engine = getRenderingEngine(RENDERING_ENGINE_ID)
   if (!engine) throw new Error('No rendering engine for MPR')
@@ -64,6 +82,11 @@ export async function setupMpr(
       element: elements.coronal,
       defaultOptions: { orientation: Enums.OrientationAxis.CORONAL },
     },
+    {
+      viewportId: MPR_VIEWPORT_IDS.VOLUME_3D,
+      type: Enums.ViewportType.VOLUME_3D,
+      element: elements.vol3d,
+    },
   ])
 
   const volumeId = `${VOLUME_SCHEME}:mpr-${Date.now()}`
@@ -73,16 +96,35 @@ export async function setupMpr(
   const volume = await volumeLoader.createAndCacheVolume(volumeId, { imageIds })
   ;(volume as IStreamingImageVolume).load()
 
+  const sliceViewportIds = [
+    MPR_VIEWPORT_IDS.AXIAL,
+    MPR_VIEWPORT_IDS.SAGITTAL,
+    MPR_VIEWPORT_IDS.CORONAL,
+  ]
+
   await Promise.all(
-    Object.values(MPR_VIEWPORT_IDS).map((vpId) => {
+    sliceViewportIds.map((vpId) => {
       const vp = engine.getViewport(vpId) as IVolumeViewport
       return vp.setVolumes([{ volumeId }])
     }),
   )
 
+  const vp3d = engine.getViewport(MPR_VIEWPORT_IDS.VOLUME_3D) as IVolumeViewport
+  await vp3d.setVolumes([{ volumeId }])
+  vp3d.setProperties({ preset: initialPreset })
+
   setupMprToolGroup()
   engine.renderViewports(Object.values(MPR_VIEWPORT_IDS))
-  appLog('info', 'MPR ready')
+  appLog('info', 'MPR + 3D ready')
+}
+
+export function set3DPreset(presetName: string): void {
+  const engine = getRenderingEngine(RENDERING_ENGINE_ID)
+  if (!engine) return
+  const vp = engine.getViewport(MPR_VIEWPORT_IDS.VOLUME_3D) as IVolumeViewport | undefined
+  if (!vp) return
+  vp.setProperties({ preset: presetName })
+  vp.render()
 }
 
 function setupMprToolGroup(): void {
