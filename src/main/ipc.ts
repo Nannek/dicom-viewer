@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { IPC } from '../shared/ipcChannels'
-import { openDicomFiles, openDicomFolder } from './fileHandler'
+import { openDicomFiles, openDicomFolder, saveImage } from './fileHandler'
 
 export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.OPEN_FILES, async (event) => {
@@ -13,5 +13,11 @@ export function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return []
     return openDicomFolder(win)
+  })
+
+  ipcMain.handle(IPC.SAVE_IMAGE, async (event, dataUrl: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return null
+    return saveImage(win, dataUrl)
   })
 }

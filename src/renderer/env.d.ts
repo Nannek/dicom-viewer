@@ -9,6 +9,7 @@ declare global {
       openFolder: () => Promise<DicomFileData[]>
       onTriggerOpen: (callback: () => void) => () => void
       onTriggerOpenFolder: (callback: () => void) => () => void
+      saveImage: (dataUrl: string) => Promise<string | null>
     }
   }
 }

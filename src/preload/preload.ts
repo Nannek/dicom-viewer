@@ -17,6 +17,8 @@ const api = {
     ipcRenderer.on(IPC.TRIGGER_OPEN_FOLDER, handler)
     return () => ipcRenderer.removeListener(IPC.TRIGGER_OPEN_FOLDER, handler)
   },
+
+  saveImage: (dataUrl: string): Promise<string | null> => ipcRenderer.invoke(IPC.SAVE_IMAGE, dataUrl),
 }
 
 contextBridge.exposeInMainWorld('api', api)

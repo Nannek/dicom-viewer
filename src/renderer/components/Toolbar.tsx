@@ -1,6 +1,7 @@
 import { useAppStore } from '../store'
 import { setActivePrimaryTool } from '../cornerstone/tools'
-import { resetView, applyWindowPreset } from '../cornerstone/viewportRef'
+import { resetView, applyWindowPreset, captureViewportAsDataUrl } from '../cornerstone/viewportRef'
+import { appLog } from '../logger'
 
 const WINDOW_PRESETS = [
   { label: 'Brain', center: 40, width: 80 },
@@ -23,6 +24,13 @@ export function Toolbar() {
   function handleTool(toolName: string) {
     setActivePrimaryTool(toolName)
     setActiveTool(toolName)
+  }
+
+  async function handleExport() {
+    const dataUrl = captureViewportAsDataUrl()
+    if (!dataUrl) return
+    const saved = await window.api.saveImage(dataUrl)
+    if (saved) appLog('info', `Exported PNG: ${saved}`)
   }
 
   return (
@@ -67,6 +75,9 @@ export function Toolbar() {
           </option>
         ))}
       </select>
+      <button className="toolbar-btn" title="Export current frame as PNG" onClick={() => { void handleExport() }}>
+        Export
+      </button>
       <div className="toolbar-separator" />
       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
         Mid-click: pan &nbsp;|&nbsp; Right-click: zoom &nbsp;|&nbsp; Scroll: navigate stack

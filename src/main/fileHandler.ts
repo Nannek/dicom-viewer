@@ -1,5 +1,5 @@
 import { dialog, BrowserWindow } from 'electron'
-import { readFile, readdir, open as openFd } from 'fs/promises'
+import { readFile, readdir, open as openFd, writeFile } from 'fs/promises'
 import { join, extname } from 'path'
 import type { DicomFileData } from '../shared/types'
 
@@ -56,6 +56,18 @@ async function readDicomFiles(filePaths: string[]): Promise<DicomFileData[]> {
       }
     }),
   )
+}
+
+export async function saveImage(win: BrowserWindow, dataUrl: string): Promise<string | null> {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Save Viewport as PNG',
+    defaultPath: 'dicom-export.png',
+    filters: [{ name: 'PNG Images', extensions: ['png'] }],
+  })
+  if (canceled || !filePath) return null
+  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+  await writeFile(filePath, Buffer.from(base64, 'base64'))
+  return filePath
 }
 
 async function isDicom(filePath: string): Promise<boolean> {

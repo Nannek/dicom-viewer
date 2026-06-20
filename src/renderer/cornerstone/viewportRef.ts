@@ -32,3 +32,12 @@ export function applyWindowPreset(center: number, width: number): void {
   viewport.setProperties({ voiRange: { lower: center - width / 2, upper: center + width / 2 } })
   viewport.render()
 }
+
+export function captureViewportAsDataUrl(): string | null {
+  const engine = getRenderingEngine(RENDERING_ENGINE_ID)
+  if (!engine) return null
+  const viewport = engine.getViewport(VIEWPORT_ID)
+  if (!viewport) return null
+  const canvas = (viewport as unknown as { canvas?: HTMLCanvasElement }).canvas
+  return canvas?.toDataURL('image/png') ?? null
+}
