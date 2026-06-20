@@ -38,8 +38,11 @@ interface DicomMeta {
   }
   generalSeriesModule: { modality: string }
   imagePlaneModule: {
+    rows: number
+    columns: number
     rowPixelSpacing: number
     columnPixelSpacing: number
+    pixelSpacing: [number, number]
     sliceThickness: number
     rowCosines: [number, number, number]
     columnCosines: [number, number, number]
@@ -63,6 +66,8 @@ function cacheMetadataFromDataset(baseKey: string, dataset: DataSet): void {
   const modality = dataset.string('x00080060')?.trim() ?? 'OT'
   const slope = parseFloat(dataset.string('x00281053') ?? '1') || 1
   const intercept = parseFloat(dataset.string('x00281052') ?? '0')
+  const rows = dataset.uint16('x00280010') ?? 0
+  const columns = dataset.uint16('x00280011') ?? 0
   const spacingRaw = dataset.string('x00280030') ?? '1\\1'
   const [rowSpacing, colSpacing] = spacingRaw.split('\\').map((s) => parseFloat(s) || 1)
   const sliceThickness = parseFloat(dataset.string('x00180050') ?? '1') || 1
@@ -78,8 +83,11 @@ function cacheMetadataFromDataset(baseKey: string, dataset: DataSet): void {
     imagePixelModule: { pixelRepresentation, bitsAllocated, bitsStored, highBit, photometricInterpretation: photometric, samplesPerPixel },
     generalSeriesModule: { modality },
     imagePlaneModule: {
+      rows,
+      columns,
       rowPixelSpacing: rowSpacing,
       columnPixelSpacing: colSpacing,
+      pixelSpacing: [rowSpacing, colSpacing],
       sliceThickness,
       rowCosines,
       columnCosines,
