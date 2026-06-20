@@ -19,7 +19,7 @@ const TOOLS = [
 ]
 
 export function Toolbar() {
-  const { activeTool, setActiveTool, loadFiles, loadFolder, isLogOpen, toggleLogPanel } = useAppStore()
+  const { activeTool, setActiveTool, loadFiles, loadFolder, isLogOpen, toggleLogPanel, imageIds, isMprMode, setMprMode } = useAppStore()
 
   function handleTool(toolName: string) {
     setActivePrimaryTool(toolName)
@@ -42,7 +42,7 @@ export function Toolbar() {
         Open Folder
       </button>
       <div className="toolbar-separator" />
-      {TOOLS.map((t) => (
+      {!isMprMode && TOOLS.map((t) => (
         <button
           key={t.name}
           className={`toolbar-btn${activeTool === t.name ? ' active' : ''}`}
@@ -52,36 +52,58 @@ export function Toolbar() {
           {t.label}
         </button>
       ))}
-      <div className="toolbar-separator" />
-      <button className="toolbar-btn" title="Fit image to window and reset W/L" onClick={resetView}>
-        Fit
-      </button>
-      <select
-        className="toolbar-select"
-        title="Apply window/level preset"
-        value=""
-        onChange={(e) => {
-          const preset = WINDOW_PRESETS.find((p) => p.label === e.target.value)
-          if (preset) applyWindowPreset(preset.center, preset.width)
-          e.target.value = ''
-        }}
-      >
-        <option value="" disabled>
-          Presets
-        </option>
-        {WINDOW_PRESETS.map((p) => (
-          <option key={p.label} value={p.label}>
-            {p.label}
+      {!isMprMode && <div className="toolbar-separator" />}
+      {!isMprMode && (
+        <button className="toolbar-btn" title="Fit image to window and reset W/L" onClick={resetView}>
+          Fit
+        </button>
+      )}
+      {!isMprMode && (
+        <select
+          className="toolbar-select"
+          title="Apply window/level preset"
+          value=""
+          onChange={(e) => {
+            const preset = WINDOW_PRESETS.find((p) => p.label === e.target.value)
+            if (preset) applyWindowPreset(preset.center, preset.width)
+            e.target.value = ''
+          }}
+        >
+          <option value="" disabled>
+            Presets
           </option>
-        ))}
-      </select>
-      <button className="toolbar-btn" title="Export current frame as PNG" onClick={() => { void handleExport() }}>
-        Export
+          {WINDOW_PRESETS.map((p) => (
+            <option key={p.label} value={p.label}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      )}
+      {!isMprMode && (
+        <button className="toolbar-btn" title="Export current frame as PNG" onClick={() => { void handleExport() }}>
+          Export
+        </button>
+      )}
+      <div className="toolbar-separator" />
+      <button
+        className={`toolbar-btn${isMprMode ? ' active' : ''}`}
+        title="Multi-Planar Reconstruction — axial/sagittal/coronal views (CT series only)"
+        disabled={imageIds.length < 2}
+        onClick={() => setMprMode(!isMprMode)}
+      >
+        MPR
       </button>
       <div className="toolbar-separator" />
-      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        Mid-click: pan &nbsp;|&nbsp; Right-click: zoom &nbsp;|&nbsp; Scroll: navigate stack
-      </span>
+      {!isMprMode && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          Mid-click: pan &nbsp;|&nbsp; Right-click: zoom &nbsp;|&nbsp; Scroll: navigate stack
+        </span>
+      )}
+      {isMprMode && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          Left-drag: crosshairs &nbsp;|&nbsp; Mid-click: pan &nbsp;|&nbsp; Right-click: zoom
+        </span>
+      )}
       <div style={{ flex: 1 }} />
       <button
         className={`toolbar-btn${isLogOpen ? ' active' : ''}`}

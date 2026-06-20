@@ -7,6 +7,10 @@ A desktop application for viewing and inspecting DICOM medical images. Built wit
 - Open single DICOM files or entire folders of DICOM files
 - Multi-frame DICOM and image stack support with cine (video) playback
 - Interactive image manipulation: window/level, pan, zoom, rotate
+- Named window/level presets: Brain, Soft Tissue, Abdomen, Lung, Bone
+- Hounsfield Unit (HU) readout — value under cursor shown as overlay
+- Export current viewport frame as PNG
+- Multi-Planar Reconstruction (MPR) — axial, sagittal, and coronal views for CT series
 - Mouse wheel stack navigation
 - DICOM metadata inspection panel with searchable tag table
 - Debug log panel
@@ -14,7 +18,7 @@ A desktop application for viewing and inspecting DICOM medical images. Built wit
 
 ## Supported DICOM Files
 
-Supports uncompressed transfer syntaxes: Explicit VR Little Endian, Implicit VR Little Endian — which covers the large majority of clinical DICOM files. Compressed formats (JPEG, JPEG-LS, JPEG 2000) are not currently supported.
+Supports uncompressed transfer syntaxes (Explicit/Implicit VR Little Endian) as well as compressed formats (JPEG Baseline, JPEG-LS, JPEG 2000) via `@cornerstonejs/dicom-image-loader`.
 
 ## Getting Started
 
@@ -76,6 +80,9 @@ Produces a platform installer in `dist/`:
 | Zoom | Zoom | Left-drag |
 | Rotate | Planar rotate | Left-drag |
 | Fit | Reset view and W/L | Click |
+| Presets | Apply named W/L preset | Select from dropdown |
+| Export | Save current frame as PNG | Click |
+| MPR | Toggle Multi-Planar Reconstruction | Click (enabled for multi-slice stacks) |
 
 Always-available bindings regardless of active tool:
 
@@ -84,6 +91,16 @@ Always-available bindings regardless of active tool:
 | Middle-click drag | Pan |
 | Right-click drag | Zoom |
 | Scroll wheel | Navigate stack frames |
+
+### HU readout
+
+Move the mouse over the viewport to see the Hounsfield Unit (HU) value at the cursor position displayed in the bottom-left corner. Useful reference values: air ≈ −1000, water ≈ 0, soft tissue ≈ 20–80, bone ≈ 400–1000.
+
+### MPR (Multi-Planar Reconstruction)
+
+Click **MPR** to switch to a three-pane view showing axial, sagittal, and coronal reformats of the loaded CT volume. Left-drag the crosshairs in any pane to navigate all three planes simultaneously. Click **MPR** again to return to single-pane stack view.
+
+MPR requires a CT series loaded as a multi-slice stack (via Open Folder) with Image Position Patient metadata (tag 0020,0032). X-ray single images and series without position metadata will show a geometric approximation.
 
 ### Cine playback
 
@@ -128,9 +145,11 @@ src/
     │   └── LogPanel.tsx
     └── cornerstone/
         ├── init.ts             # CS3D + tools init, called once before React mounts
-        ├── localImageLoader.ts # Custom 'dicomlocal:' scheme image loader
+        ├── localImageLoader.ts # Custom 'dicomlocal:' scheme image loader (uncompressed)
+        ├── compressedLoader.ts # Blob URL wrapper for compressed DICOM via dicom-image-loader
+        ├── mprSetup.ts         # MPR volume loading, orthographic viewports, crosshairs
         ├── tools.ts            # Tool group registration and active-tool switching
-        └── viewportRef.ts      # Shared DOM ref for the viewport element
+        └── viewportRef.ts      # Shared DOM ref + viewport helpers (reset, presets, export)
 ```
 
 ### DICOM file flow
@@ -141,7 +160,7 @@ src/
 
 ### Custom image loader
 
-`@cornerstonejs/dicom-image-loader` is intentionally not used — its IIFE-format codec workers conflict with Vite's code-splitting bundler. Instead, `localImageLoader.ts` decodes raw pixel data with `dicom-parser` directly. Pixel values are pre-scaled to Hounsfield units (Float32) so that Cornerstone3D's VTK scalar range aligns with the stored Window Center / Window Width values.
+`localImageLoader.ts` decodes uncompressed DICOM pixel data with `dicom-parser` directly and pre-scales pixel values to Hounsfield units (Float32). Compressed transfer syntaxes (JPEG, JPEG-LS, JPEG 2000) are detected in `storeBuffer()` by reading tag `(0002,0010)` and delegated to `@cornerstonejs/dicom-image-loader` via `wadouri:` blob URLs.
 
 ## Development
 

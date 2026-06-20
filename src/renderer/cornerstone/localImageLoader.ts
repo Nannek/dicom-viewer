@@ -9,6 +9,7 @@
 import { imageLoader, metaData, utilities, Enums, cache } from '@cornerstonejs/core'
 import type { IImage } from '@cornerstonejs/core/types'
 import dicomParser from 'dicom-parser'
+import type { DataSet } from 'dicom-parser'
 import { appLog } from '../logger'
 import { createWadouriImageId, revokeCompressedBlobs } from './compressedLoader'
 
@@ -39,6 +40,7 @@ interface DicomMeta {
   imagePlaneModule: {
     rowPixelSpacing: number
     columnPixelSpacing: number
+    sliceThickness: number
     rowCosines: [number, number, number]
     columnCosines: [number, number, number]
     imagePositionPatient: [number, number, number]
@@ -49,6 +51,45 @@ interface DicomMeta {
 }
 const metaCache = new Map<string, DicomMeta>()
 let idCounter = 0
+
+function cacheMetadataFromDataset(baseKey: string, dataset: DataSet): void {
+  if (metaCache.has(baseKey)) return
+  const bitsAllocated = dataset.uint16('x00280100') ?? 8
+  const bitsStored = dataset.uint16('x00280101') ?? bitsAllocated
+  const highBit = dataset.uint16('x00280102') ?? bitsStored - 1
+  const pixelRepresentation = dataset.uint16('x00280103') ?? 0
+  const samplesPerPixel = dataset.uint16('x00280002') ?? 1
+  const photometric = dataset.string('x00280004')?.trim() ?? 'MONOCHROME2'
+  const modality = dataset.string('x00080060')?.trim() ?? 'OT'
+  const slope = parseFloat(dataset.string('x00281053') ?? '1') || 1
+  const intercept = parseFloat(dataset.string('x00281052') ?? '0')
+  const spacingRaw = dataset.string('x00280030') ?? '1\\1'
+  const [rowSpacing, colSpacing] = spacingRaw.split('\\').map((s) => parseFloat(s) || 1)
+  const sliceThickness = parseFloat(dataset.string('x00180050') ?? '1') || 1
+  const ippRaw = dataset.string('x00200032')
+  const imagePositionPatient: [number, number, number] = ippRaw
+    ? (ippRaw.split('\\').map(Number) as [number, number, number])
+    : [0, 0, 0]
+  const iopRaw = dataset.string('x00200037')
+  const imageOrientationPatient = iopRaw ? iopRaw.split('\\').map(Number) : [1, 0, 0, 0, 1, 0]
+  const rowCosines = imageOrientationPatient.slice(0, 3) as [number, number, number]
+  const columnCosines = imageOrientationPatient.slice(3, 6) as [number, number, number]
+  metaCache.set(baseKey, {
+    imagePixelModule: { pixelRepresentation, bitsAllocated, bitsStored, highBit, photometricInterpretation: photometric, samplesPerPixel },
+    generalSeriesModule: { modality },
+    imagePlaneModule: {
+      rowPixelSpacing: rowSpacing,
+      columnPixelSpacing: colSpacing,
+      sliceThickness,
+      rowCosines,
+      columnCosines,
+      imagePositionPatient,
+      imageOrientationPatient,
+      usingDefaultValues: !ippRaw,
+    },
+    scalingModule: { rescaleSlope: slope, rescaleIntercept: intercept },
+  })
+}
 
 function localMetadataProvider(type: string, imageId: string): unknown {
   if (!imageId.startsWith(SCHEME + ':')) return undefined
@@ -93,6 +134,7 @@ export function storeBuffer(buffer: ArrayBuffer): string[] {
     }
 
     bufferCache.set(baseId, buffer)
+    cacheMetadataFromDataset(baseId, dataset)
     const numFrames = Math.max(1, parseInt(dataset.string('x00280008') ?? '1', 10) || 1)
     if (numFrames > 1) {
       appLog('info', `Multi-frame DICOM detected: ${numFrames} frames`)
@@ -137,8 +179,6 @@ async function buildImage(imageId: string): Promise<IImage> {
   const rows = dataset.uint16('x00280010') ?? 0
   const cols = dataset.uint16('x00280011') ?? 0
   const bitsAllocated = dataset.uint16('x00280100') ?? 8
-  const bitsStored = dataset.uint16('x00280101') ?? bitsAllocated
-  const highBit = dataset.uint16('x00280102') ?? bitsStored - 1
   const pixelRepresentation = dataset.uint16('x00280103') ?? 0
   const samplesPerPixel = dataset.uint16('x00280002') ?? 1
   const photometric = dataset.string('x00280004')?.trim() ?? 'MONOCHROME2'
@@ -151,16 +191,6 @@ async function buildImage(imageId: string): Promise<IImage> {
 
   const spacingRaw = dataset.string('x00280030') ?? '1\\1'
   const [rowSpacing, colSpacing] = spacingRaw.split('\\').map((s) => parseFloat(s) || 1)
-
-  const ippRaw = dataset.string('x00200032')
-  const imagePositionPatient: [number, number, number] = ippRaw
-    ? (ippRaw.split('\\').map(Number) as [number, number, number])
-    : [0, 0, 0]
-
-  const iopRaw = dataset.string('x00200037')
-  const imageOrientationPatient = iopRaw ? iopRaw.split('\\').map(Number) : [1, 0, 0, 0, 1, 0]
-  const rowCosines = imageOrientationPatient.slice(0, 3) as [number, number, number]
-  const columnCosines = imageOrientationPatient.slice(3, 6) as [number, number, number]
 
   const el = dataset.elements['x7fe00010']
   if (!el) {
@@ -220,30 +250,8 @@ async function buildImage(imageId: string): Promise<IImage> {
     windowCenter = minVal + windowWidth / 2
   }
 
-  // Register metadata keyed by baseKey so all frames of a multi-frame file share it.
-  if (!metaCache.has(baseKey)) {
-    metaCache.set(baseKey, {
-      imagePixelModule: {
-        pixelRepresentation,
-        bitsAllocated,
-        bitsStored,
-        highBit,
-        photometricInterpretation: photometric,
-        samplesPerPixel,
-      },
-      generalSeriesModule: { modality },
-      imagePlaneModule: {
-        rowPixelSpacing: rowSpacing,
-        columnPixelSpacing: colSpacing,
-        rowCosines,
-        columnCosines,
-        imagePositionPatient,
-        imageOrientationPatient,
-        usingDefaultValues: !ippRaw,
-      },
-      scalingModule: { rescaleSlope: slope, rescaleIntercept: intercept },
-    })
-  }
+  // Populate metadata cache if not already done by storeBuffer (fallback).
+  cacheMetadataFromDataset(baseKey, dataset)
 
   const voxelManager = utilities.VoxelManager.createImageVoxelManager({
     scalarData: scaledPixels,

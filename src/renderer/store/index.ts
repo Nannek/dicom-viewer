@@ -18,6 +18,7 @@ interface AppState {
   playbackFps: number
   activeTool: string
   isLogOpen: boolean
+  isMprMode: boolean
 
   loadFiles: () => Promise<void>
   loadFolder: () => Promise<void>
@@ -26,6 +27,7 @@ interface AppState {
   setPlaybackFps: (fps: number) => void
   setActiveTool: (tool: string) => void
   toggleLogPanel: () => void
+  setMprMode: (enabled: boolean) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -36,6 +38,7 @@ export const useAppStore = create<AppState>((set) => ({
   playbackFps: 10,
   activeTool: 'WindowLevel',
   isLogOpen: false,
+  isMprMode: false,
 
   loadFiles: async () => {
     appLog('info', 'Opening file dialog')
@@ -62,6 +65,7 @@ export const useAppStore = create<AppState>((set) => ({
   setPlaybackFps: (playbackFps) => set({ playbackFps }),
   setActiveTool: (activeTool) => set({ activeTool }),
   toggleLogPanel: () => set((s) => ({ isLogOpen: !s.isLogOpen })),
+  setMprMode: (isMprMode) => set((s) => ({ isMprMode, isPlaying: isMprMode ? false : s.isPlaying })),
 }))
 
 function applyFiles(files: DicomFileData[], set: (partial: Partial<AppState>) => void): void {
