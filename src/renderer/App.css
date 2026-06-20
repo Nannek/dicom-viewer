@@ -383,6 +383,7 @@ body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  user-select: text;
 }
 
 .log-header {
