@@ -56,7 +56,7 @@ function localMetadataProvider(type: string, imageId: string): unknown {
   const { baseKey } = parseImageId(imageId)
   const m = metaCache.get(baseKey)
   if (!m) return undefined
-  return (m as Record<string, unknown>)[type]
+  return (m as unknown as Record<string, unknown>)[type]
 }
 
 export function registerLocalImageLoader(): void {

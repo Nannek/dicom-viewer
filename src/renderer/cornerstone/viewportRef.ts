@@ -23,3 +23,12 @@ export function resetView(): void {
   viewport.resetProperties()
   viewport.render()
 }
+
+export function applyWindowPreset(center: number, width: number): void {
+  const engine = getRenderingEngine(RENDERING_ENGINE_ID)
+  if (!engine) return
+  const viewport = engine.getViewport(VIEWPORT_ID) as IStackViewport | undefined
+  if (!viewport) return
+  viewport.setProperties({ voiRange: { lower: center - width / 2, upper: center + width / 2 } })
+  viewport.render()
+}

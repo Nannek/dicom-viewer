@@ -105,6 +105,26 @@ body {
   margin: 0 4px;
 }
 
+.toolbar-select {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.1s;
+}
+
+.toolbar-select:hover {
+  border-color: var(--accent);
+}
+
+.toolbar-select:focus {
+  border-color: var(--accent);
+}
+
 /* ── Viewport ────────────────────────────────────────── */
 
 .viewport-container {
