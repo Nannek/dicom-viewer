@@ -4,8 +4,9 @@ import {
   Enums,
   cache,
   cornerstoneStreamingImageVolumeLoader,
+  CONSTANTS,
 } from '@cornerstonejs/core'
-import type { IVolumeViewport, IStreamingImageVolume, VolumeLoaderFn } from '@cornerstonejs/core/types'
+import type { IVolumeViewport, IStreamingImageVolume, VolumeLoaderFn, ViewportPreset } from '@cornerstonejs/core/types'
 import {
   addTool,
   CrosshairsTool,
@@ -39,8 +40,32 @@ export const MPR_VIEWPORT_IDS = {
   VOLUME_3D: 'mpr-3d',
 } as const
 
+// Register a custom "Dense Bone" preset that makes everything below 600 HU
+// fully transparent. Stock CT-Bone ramps opacity from –16→641 HU, so cast
+// material (plaster ~200–600 HU, fibreglass ~100–400 HU) shows through.
+// This preset skips straight to 700 HU, hiding the cast while keeping
+// cortical bone (700–1900 HU) fully visible.
+;(function registerCustomPresets() {
+  const dense: ViewportPreset = {
+    name: 'CT-Dense-Bone',
+    gradientOpacity: '4 0 1 255 1',
+    specularPower: '10',
+    scalarOpacity: '8 -3024 0 599 0 700 0.8 3071 0.85',
+    specular: '0.2',
+    shade: '1',
+    ambient: '0.1',
+    colorTransfer: '16 -3024 0 0 0 599 0 0 0 700 0.905882 0.815686 0.552941 3071 1 1 1',
+    diffuse: '0.9',
+    interpolation: '1',
+  }
+  if (!CONSTANTS.VIEWPORT_PRESETS.some((p) => p.name === dense.name)) {
+    CONSTANTS.VIEWPORT_PRESETS.push(dense)
+  }
+})()
+
 export const VOLUME_3D_PRESETS = [
   { label: 'CT Bone', value: 'CT-Bone' },
+  { label: 'CT Dense Bone', value: 'CT-Dense-Bone' },
   { label: 'CT Bone (alt)', value: 'CT-Bones' },
   { label: 'CT Soft Tissue', value: 'CT-Soft-Tissue' },
   { label: 'CT Muscle', value: 'CT-Muscle' },
