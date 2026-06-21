@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { RenderingEngine } from '@cornerstonejs/core'
 import { RENDERING_ENGINE_ID } from '../cornerstone/viewportRef'
-import { setupMpr, teardownMpr, set3DPreset, VOLUME_3D_PRESETS } from '../cornerstone/mprSetup'
+import { setupMpr, teardownMpr, set3DPreset, set3DClipBounds, VOLUME_3D_PRESETS } from '../cornerstone/mprSetup'
+import type { ClipBounds } from '../cornerstone/mprSetup'
 import { useAppStore } from '../store'
 import { appLog } from '../logger'
 
@@ -26,9 +27,12 @@ export function MprViewport() {
   }
 
   const [preset,    setPreset]    = useState('CT-Bone')
-  const [colSplit,  setColSplit]  = useState(50)   // left-column share (0-100)
-  const [rowSplit,  setRowSplit]  = useState(50)   // top-row share (0-100)
+  const [colSplit,  setColSplit]  = useState(50)
+  const [rowSplit,  setRowSplit]  = useState(50)
   const [maximized, setMaximized] = useState<PaneId | null>(null)
+  const [showClip,  setShowClip]  = useState(false)
+  const DEFAULT_CLIP: ClipBounds = { xLow: 0, xHigh: 100, yLow: 0, yHigh: 100, zLow: 0, zHigh: 100 }
+  const [clipBounds, setClipBounds] = useState<ClipBounds>(DEFAULT_CLIP)
 
   const { imageIds } = useAppStore()
 
@@ -54,6 +58,21 @@ export function MprViewport() {
   function handlePresetChange(value: string) {
     setPreset(value)
     set3DPreset(value)
+  }
+
+  function handleClipChange(key: keyof ClipBounds, raw: string) {
+    const v = parseInt(raw, 10)
+    const next = { ...clipBounds, [key]: v }
+    // keep low ≤ high
+    if (key.endsWith('Low')  && v > clipBounds[key.replace('Low',  'High') as keyof ClipBounds]) return
+    if (key.endsWith('High') && v < clipBounds[key.replace('High', 'Low')  as keyof ClipBounds]) return
+    setClipBounds(next)
+    set3DClipBounds(next)
+  }
+
+  function resetClip() {
+    setClipBounds(DEFAULT_CLIP)
+    set3DClipBounds(DEFAULT_CLIP)
   }
 
   function startDragCol(e: React.MouseEvent) {
@@ -114,15 +133,24 @@ export function MprViewport() {
             <div className="mpr-label">
               <span className="mpr-label-text">{label}</span>
               {id === 'vol3d' && (
-                <select
-                  className="toolbar-select mpr-preset-select"
-                  value={preset}
-                  onChange={(e) => handlePresetChange(e.target.value)}
-                >
-                  {VOLUME_3D_PRESETS.map((p) => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
+                <>
+                  <button
+                    className={`mpr-maximize-btn${showClip ? ' active' : ''}`}
+                    title="Toggle clipping controls"
+                    onClick={() => setShowClip((s) => !s)}
+                  >
+                    Clip
+                  </button>
+                  <select
+                    className="toolbar-select mpr-preset-select"
+                    value={preset}
+                    onChange={(e) => handlePresetChange(e.target.value)}
+                  >
+                    {VOLUME_3D_PRESETS.map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                </>
               )}
               <button
                 className="mpr-maximize-btn"
@@ -132,6 +160,37 @@ export function MprViewport() {
                 {isMax ? '⊟' : '⛶'}
               </button>
             </div>
+            {id === 'vol3d' && (
+              <div className="mpr-clip-panel" style={{ display: showClip ? 'flex' : 'none' }}>
+                {(['X', 'Y', 'Z'] as const).map((axis) => {
+                  const lowKey  = `${axis.toLowerCase()}Low`  as keyof ClipBounds
+                  const highKey = `${axis.toLowerCase()}High` as keyof ClipBounds
+                  return (
+                    <div key={axis} className="mpr-clip-row">
+                      <span className="mpr-clip-axis">{axis}</span>
+                      <input
+                        className="mpr-clip-slider"
+                        type="range" min={0} max={100} step={1}
+                        value={clipBounds[lowKey]}
+                        title={`${axis} start: ${clipBounds[lowKey]}%`}
+                        onChange={(e) => handleClipChange(lowKey, e.target.value)}
+                      />
+                      <input
+                        className="mpr-clip-slider"
+                        type="range" min={0} max={100} step={1}
+                        value={clipBounds[highKey]}
+                        title={`${axis} end: ${clipBounds[highKey]}%`}
+                        onChange={(e) => handleClipChange(highKey, e.target.value)}
+                      />
+                      <span className="mpr-clip-val">
+                        {clipBounds[lowKey]}–{clipBounds[highKey]}
+                      </span>
+                    </div>
+                  )
+                })}
+                <button className="mpr-clip-reset" onClick={resetClip}>Reset</button>
+              </div>
+            )}
             <div
               ref={elRefs[id]}
               className="mpr-viewport-el"

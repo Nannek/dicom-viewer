@@ -16,8 +16,21 @@ import {
   ToolGroupManager,
   Enums as ToolEnums,
 } from '@cornerstonejs/tools'
+import vtkPlane from '@kitware/vtk.js/Common/DataModel/Plane'
 import { RENDERING_ENGINE_ID } from './viewportRef'
 import { appLog } from '../logger'
+
+export interface ClipBounds {
+  xLow: number; xHigh: number  // 0–100 percent of volume extent
+  yLow: number; yHigh: number
+  zLow: number; zHigh: number
+}
+
+type VtkMapperLike = {
+  removeAllClippingPlanes(): void
+  addClippingPlane(p: ReturnType<typeof vtkPlane.newInstance>): void
+  getInputData(): { getBounds(): [number, number, number, number, number, number] } | null
+}
 
 export const MPR_VIEWPORT_IDS = {
   AXIAL: 'mpr-axial',
@@ -127,6 +140,45 @@ export function set3DPreset(presetName: string): void {
   const vp = engine.getViewport(MPR_VIEWPORT_IDS.VOLUME_3D) as IVolumeViewport | undefined
   if (!vp) return
   vp.setProperties({ preset: presetName })
+  vp.render()
+}
+
+export function set3DClipBounds(bounds: ClipBounds): void {
+  const engine = getRenderingEngine(RENDERING_ENGINE_ID)
+  if (!engine) return
+  const vp = engine.getViewport(MPR_VIEWPORT_IDS.VOLUME_3D) as IVolumeViewport | undefined
+  if (!vp) return
+
+  const actors = vp.getActors()
+  if (!actors.length) return
+  const mapper = (actors[0].actor as unknown as { getMapper(): VtkMapperLike }).getMapper()
+  const imageData = mapper.getInputData()
+  if (!imageData) return
+
+  const [vxMin, vxMax, vyMin, vyMax, vzMin, vzMax] = imageData.getBounds()
+
+  mapper.removeAllClippingPlanes()
+
+  function lerp(a: number, b: number, t: number) { return a + t * (b - a) }
+  const { xLow, xHigh, yLow, yHigh, zLow, zHigh } = bounds
+
+  // Each axis: a "low" plane (normal points +axis) and "high" plane (normal points -axis)
+  const planes: [number, number, number, number, number, number][] = [
+    [lerp(vxMin, vxMax, xLow / 100),  0, 0,  1, 0, 0],
+    [lerp(vxMin, vxMax, xHigh / 100), 0, 0, -1, 0, 0],
+    [0, lerp(vyMin, vyMax, yLow / 100),  0,  0, 1, 0],
+    [0, lerp(vyMin, vyMax, yHigh / 100), 0,  0,-1, 0],
+    [0, 0, lerp(vzMin, vzMax, zLow / 100),   0, 0, 1],
+    [0, 0, lerp(vzMin, vzMax, zHigh / 100),  0, 0,-1],
+  ]
+
+  for (const [ox, oy, oz, nx, ny, nz] of planes) {
+    const p = vtkPlane.newInstance()
+    p.setOrigin(ox, oy, oz)
+    p.setNormal(nx, ny, nz)
+    mapper.addClippingPlane(p)
+  }
+
   vp.render()
 }
 
