@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { RenderingEngine, Enums, cache } from '@cornerstonejs/core'
+import { RenderingEngine, Enums, cache, utilities } from '@cornerstonejs/core'
 import { Enums as ToolEnums } from '@cornerstonejs/tools'
 import type { IStackViewport } from '@cornerstonejs/core/types'
 import { setupToolGroup } from '../cornerstone/tools'
@@ -34,18 +34,25 @@ export function Viewport() {
 
     const el = elementRef.current
     const handleHuMove = (evt: Event) => {
-      const detail = (evt as CustomEvent<{ currentPoints: { image: { x: number; y: number } } }>)
+      const detail = (evt as CustomEvent<{ currentPoints: { world: [number, number, number] } }>)
         .detail
-      const { x, y } = detail.currentPoints.image
+      const worldPoint = detail.currentPoints.world
       const viewport = engine.getViewport(VIEWPORT_ID) as IStackViewport
       const imageId = viewport.getCurrentImageId()
       if (!imageId) return
       const image = cache.getImage(imageId)
       if (!image) return
-      const col = Math.floor(x)
-      const row = Math.floor(y)
-      if (col >= 0 && col < image.columns && row >= 0 && row < image.rows) {
-        setHuValue((image.getPixelData() as Float32Array)[row * image.columns + col])
+      try {
+        const imageCoords = utilities.worldToImageCoords(imageId, worldPoint)
+        if (!imageCoords) return
+        const [row, col] = imageCoords
+        const r = Math.floor(row)
+        const c = Math.floor(col)
+        if (c >= 0 && c < image.columns && r >= 0 && r < image.rows) {
+          setHuValue((image.getPixelData() as Float32Array)[r * image.columns + c])
+        }
+      } catch {
+        // metadata not available for this imageId
       }
     }
     const handleHuLeave = () => setHuValue(null)
